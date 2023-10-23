@@ -15,11 +15,13 @@ pub mod store;
 
 pub const DEFAULT_NAME: &str = "POSTGRESQL_DEFAULT_NAME";
 
+// 描述此时与client的交互状态
 #[derive(Debug, Clone, Default)]
 pub enum PgWireConnectionState {
     #[default]
     AwaitingStartup,
     AuthenticationInProgress,
+    // 表示完成认证阶段 可以进行查询了
     ReadyForQuery,
     QueryInProgress,
 }

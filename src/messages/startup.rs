@@ -14,6 +14,7 @@ use crate::error::{PgWireError, PgWireResult};
 #[derive(Getters, Setters, MutGetters, PartialEq, Eq, Debug, new)]
 #[getset(get = "pub", set = "pub", get_mut = "pub")]
 pub struct Startup {
+    // 启动前应该是校验版本是否兼容
     #[new(value = "3")]
     protocol_number_major: u16,
     #[new(value = "0")]
@@ -41,6 +42,7 @@ impl Message for Startup {
         let param_length = self
             .parameters
             .iter()
+            // 2 对应2个 \0
             .map(|(k, v)| k.as_bytes().len() + v.as_bytes().len() + 2)
             .sum::<usize>();
         // length:4 + protocol_number:4 + param.len + nullbyte:1
@@ -102,6 +104,7 @@ impl Message for Startup {
 }
 
 /// authentication response family, sent by backend
+/// 代表支持的认证方式
 #[derive(PartialEq, Eq, Debug)]
 pub enum Authentication {
     Ok,                   // code 0

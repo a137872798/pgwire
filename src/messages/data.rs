@@ -8,6 +8,7 @@ use crate::error::PgWireResult;
 pub(crate) const FORMAT_CODE_TEXT: i16 = 0;
 pub(crate) const FORMAT_CODE_BINARY: i16 = 1;
 
+// 对应表中的某个列字段
 #[derive(Getters, Setters, MutGetters, PartialEq, Eq, Debug, Default, new)]
 #[getset(get = "pub", set = "pub", get_mut = "pub")]
 pub struct FieldDescription {
@@ -27,6 +28,7 @@ pub struct FieldDescription {
     format_code: i16,
 }
 
+// 一组列对应row
 #[derive(Getters, Setters, MutGetters, PartialEq, Eq, Debug, Default, new)]
 #[getset(get = "pub", set = "pub", get_mut = "pub")]
 pub struct RowDescription {
@@ -45,6 +47,7 @@ impl Message for RowDescription {
             + self
                 .fields
                 .iter()
+            // 填充每个field的各个属性
                 .map(|f| f.name.as_bytes().len() + 1 + 4 + 2 + 4 + 2 + 4 + 2)
                 .sum::<usize>()
     }
@@ -109,6 +112,7 @@ impl Message for ParameterDescription {
     fn encode_body(&self, buf: &mut BytesMut) -> PgWireResult<()> {
         buf.put_i16(self.types.len() as i16);
 
+        // 填充所有类型信息
         for t in &self.types {
             buf.put_i32(*t as i32);
         }
@@ -164,6 +168,7 @@ impl Message for DataRow {
                 buf.put_i32(bytes.len() as i32);
                 buf.put_slice(bytes.as_ref());
             } else {
+                // 对冲上面的len
                 buf.put_i32(-1);
             }
         }

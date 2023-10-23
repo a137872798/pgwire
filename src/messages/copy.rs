@@ -6,6 +6,8 @@ use crate::error::PgWireResult;
 
 pub const MESSAGE_TYPE_BYTE_COPY_DATA: u8 = b'd';
 
+// copy相关的所有指令
+
 #[derive(Getters, Setters, MutGetters, PartialEq, Eq, Debug, Default, new)]
 #[getset(get = "pub", set = "pub", get_mut = "pub")]
 pub struct CopyData {

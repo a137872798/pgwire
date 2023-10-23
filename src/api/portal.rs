@@ -12,11 +12,12 @@ use crate::{
 use super::{results::FieldFormat, stmt::StoredStatement, DEFAULT_NAME};
 
 /// Represent a prepared sql statement and its parameters bound by a `Bind`
-/// request.
+/// request.   代表基于一个已经准备好的statement进行查询   Bind就是之前准备好的会话   这样的请求称为Portal
 #[derive(Debug, CopyGetters, Default, Getters, Setters, Clone)]
 #[getset(get = "pub", set = "pub", get_mut = "pub")]
 pub struct Portal<S> {
     name: String,
+    // 本次关联的一个已经解析好的会话
     statement: Arc<StoredStatement<S>>,
     parameter_format: Format,
     parameters: Vec<Option<Bytes>>,
@@ -42,7 +43,7 @@ impl From<i16> for Format {
 }
 
 impl Format {
-    /// Get format code for given index
+    /// Get format code for given index   根据下标获取某个字段
     pub fn format_for(&self, idx: usize) -> FieldFormat {
         match self {
             Format::UnifiedText => FieldFormat::Text,
@@ -74,11 +75,14 @@ impl Format {
 
 impl<S: Clone> Portal<S> {
     /// Try to create portal from bind command and current client state
+    /// portal对象是由 bind command创建的
     pub fn try_new(bind: &Bind, statement: Arc<StoredStatement<S>>) -> PgWireResult<Self> {
         let portal_name = bind
             .portal_name()
             .clone()
             .unwrap_or_else(|| DEFAULT_NAME.to_owned());
+
+        // 分别为参数和返回字段生成 format对象
 
         // param format
         let param_format = Format::from_codes(bind.parameter_format_codes());
@@ -106,6 +110,7 @@ impl<S: Clone> Portal<S> {
     where
         T: FromSqlOwned,
     {
+        // 传入了错误的类型
         if !T::accepts(pg_type) {
             return Err(PgWireError::InvalidRustTypeForParameter(
                 pg_type.name().to_owned(),
@@ -122,6 +127,7 @@ impl<S: Clone> Portal<S> {
         if let Some(ref param) = param {
             // TODO: from_sql only works with binary format
             // here we need to check format code first and seek to support text
+            // 参数转换成对应类型
             T::from_sql(pg_type, param)
                 .map(|v| Some(v))
                 .map_err(PgWireError::FailedToParseParameter)

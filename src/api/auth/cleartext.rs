@@ -22,6 +22,7 @@ pub struct CleartextPasswordAuthStartupHandler<A, P> {
 impl<V: AuthSource, P: ServerParameterProvider> StartupHandler
     for CleartextPasswordAuthStartupHandler<V, P>
 {
+    /// 处理认证阶段
     async fn on_startup<C>(
         &self,
         client: &mut C,

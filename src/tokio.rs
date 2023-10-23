@@ -22,6 +22,7 @@ use crate::messages::{Message, PgWireBackendMessage, PgWireFrontendMessage};
 #[derive(Debug, new, Getters, Setters, MutGetters)]
 #[getset(get = "pub", set = "pub", get_mut = "pub")]
 pub struct PgWireMessageServerCodec {
+    // 维护和客户端交互的状态
     client_info: ClientInfoHolder,
 }
 
@@ -31,6 +32,7 @@ impl Decoder for PgWireMessageServerCodec {
 
     fn decode(&mut self, src: &mut bytes::BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         match self.client_info.state() {
+            // 通过解析头部来判断类型
             PgWireConnectionState::AwaitingStartup => {
                 if let Some(request) = SslRequest::decode(src)? {
                     return Ok(Some(PgWireFrontendMessage::SslRequest(request)));
@@ -42,6 +44,7 @@ impl Decoder for PgWireMessageServerCodec {
 
                 Ok(None)
             }
+            // 代表其他类型消息
             _ => PgWireFrontendMessage::decode(src),
         }
     }
@@ -85,6 +88,7 @@ impl<T> ClientInfo for Framed<T, PgWireMessageServerCodec> {
     }
 }
 
+// 描述作为服务器收到数据流
 async fn process_message<S, A, Q, EQ>(
     message: PgWireFrontendMessage,
     socket: &mut Framed<S, PgWireMessageServerCodec>,
@@ -94,7 +98,7 @@ async fn process_message<S, A, Q, EQ>(
 ) -> PgWireResult<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + Sync,
-    A: StartupHandler + 'static,
+    A: StartupHandler + 'static,  // 包含认证相关的逻辑
     Q: SimpleQueryHandler + 'static,
     EQ: ExtendedQueryHandler + 'static,
 {
@@ -104,7 +108,7 @@ where
             authenticator.on_startup(socket, message).await?;
         }
         _ => {
-            // query or query in progress
+            // query or query in progress   根据不同命令类型分派给不同的handler
             match message {
                 PgWireFrontendMessage::Query(query) => {
                     query_handler.on_query(socket, query).await?;
@@ -134,6 +138,7 @@ where
     Ok(())
 }
 
+// 处理发现的不同异常
 async fn process_error<S>(
     socket: &mut Framed<S, PgWireMessageServerCodec>,
     error: PgWireError,
@@ -184,13 +189,16 @@ async fn is_sslrequest_pending(tcp_socket: &TcpStream) -> Result<bool, IOError> 
     let mut buf = [0u8; SslRequest::BODY_SIZE];
     let mut buf = ReadBuf::new(&mut buf);
     while buf.filled().len() < SslRequest::BODY_SIZE {
+        // 相当于嵌入了future体系
         if poll_fn(|cx| tcp_socket.poll_peek(cx, &mut buf)).await? == 0 {
             // the tcp_stream has ended
             return Ok(false);
         }
     }
 
+    // 根据size产生buf  并读取数据
     let mut buf = BytesMut::from(buf.filled());
+    // 通过判断第一个头是否是ssl来判断本次是否是一个ssl请求
     if let Ok(Some(_)) = SslRequest::decode(&mut buf) {
         return Ok(true);
     }
@@ -217,6 +225,7 @@ async fn peek_for_sslrequest(
     Ok(ssl)
 }
 
+// 接收到外部连接后触发该方法
 pub async fn process_socket<A, Q, EQ>(
     tcp_socket: TcpStream,
     tls_acceptor: Option<Arc<TlsAcceptor>>,
@@ -229,17 +238,21 @@ where
     Q: SimpleQueryHandler + 'static,
     EQ: ExtendedQueryHandler + 'static,
 {
+    // 获取对端地址信息 并包装成client_info
     let addr = tcp_socket.peer_addr()?;
     tcp_socket.set_nodelay(true)?;
 
     let client_info = ClientInfoHolder::new(addr, false);
+    // 把socket包装成了一个个帧 并将编解码逻辑包含在 PgWireMessageServerCodec中
     let mut tcp_socket = Framed::new(tcp_socket, PgWireMessageServerCodec::new(client_info));
+    // 从socket中读取数据 并判断是否是ssl请求
     let ssl = peek_for_sslrequest(&mut tcp_socket, tls_acceptor.is_some()).await?;
 
     if !ssl {
         // use an already configured socket.
         let mut socket = tcp_socket;
 
+        // 非ssl请求 读取数据后直接转发到message层
         while let Some(Ok(msg)) = socket.next().await {
             if let Err(e) = process_message(
                 msg,
@@ -254,9 +267,9 @@ where
             }
         }
     } else {
-        // mention the use of ssl
+        // mention the use of ssl   基于ssl产生一个新的client_info
         let client_info = ClientInfoHolder::new(addr, true);
-        // safe to unwrap tls_acceptor here
+        // safe to unwrap tls_acceptor here     tls_acceptor包含了ssl握手和解密逻辑
         let ssl_socket = tls_acceptor
             .unwrap()
             .accept(tcp_socket.into_inner())

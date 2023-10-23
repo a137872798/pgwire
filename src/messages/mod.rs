@@ -9,7 +9,7 @@ use bytes::{Buf, BufMut, BytesMut};
 
 use crate::error::{PgWireError, PgWireResult};
 
-/// Define how message encode and decoded.
+/// Define how message encode and decoded.   抽象出消息特征
 pub trait Message: Sized {
     /// Return the type code of the message. In order to maintain backward
     /// compatibility, `Startup` has no message type.
@@ -31,6 +31,7 @@ pub trait Message: Sized {
     ///
     /// Message type and length are encoded in this implementation and it calls
     /// `encode_body` for remaining parts.
+    /// 编码逻辑 先存储type 之后是长度和body
     fn encode(&self, buf: &mut BytesMut) -> PgWireResult<()> {
         if let Some(mt) = Self::message_type() {
             buf.put_u8(mt);
@@ -70,7 +71,7 @@ pub mod startup;
 /// Termination messages
 pub mod terminate;
 
-/// Messages sent from Frontend
+/// Messages sent from Frontend   作为client可以发送的所有消息类型
 #[derive(Debug)]
 pub enum PgWireFrontendMessage {
     Startup(startup::Startup),
@@ -177,7 +178,7 @@ impl PgWireFrontendMessage {
     }
 }
 
-/// Messages sent from Backend
+/// Messages sent from Backend  这是server可能返回的所有类型
 #[derive(Debug)]
 pub enum PgWireBackendMessage {
     // startup
@@ -213,6 +214,8 @@ pub enum PgWireBackendMessage {
     CopyOutResponse(copy::CopyOutResponse),
     CopyBothResponse(copy::CopyBothResponse),
 }
+
+// 同样 具体的编解码逻辑都是由msg自己实现
 
 impl PgWireBackendMessage {
     pub fn encode(&self, buf: &mut BytesMut) -> PgWireResult<()> {

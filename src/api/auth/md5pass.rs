@@ -21,6 +21,7 @@ pub struct Md5PasswordAuthStartupHandler<A, P> {
     cached_password: Mutex<Vec<u8>>,
 }
 
+/// 基于密码进行认证
 #[async_trait]
 impl<A: AuthSource, P: ServerParameterProvider> StartupHandler
     for Md5PasswordAuthStartupHandler<A, P>
@@ -36,10 +37,12 @@ impl<A: AuthSource, P: ServerParameterProvider> StartupHandler
         PgWireError: From<<C as Sink<PgWireBackendMessage>>::Error>,
     {
         match message {
+            // 处于版本校验阶段
             PgWireFrontendMessage::Startup(ref startup) => {
                 super::save_startup_parameters_to_metadata(client, startup);
                 client.set_state(PgWireConnectionState::AuthenticationInProgress);
 
+                // 基于内置的认证源 加载用户密码
                 let login_info = LoginInfo::from_client_info(client);
                 let salt_and_pass = self.auth_source.get_password(&login_info).await?;
 
@@ -48,14 +51,18 @@ impl<A: AuthSource, P: ServerParameterProvider> StartupHandler
                     .as_ref()
                     .expect("Salt is required for Md5Password authentication");
 
+                // 保存密码
                 *self.cached_password.lock().await = salt_and_pass.password().clone();
 
+                // 提示用户以密码形式认证
                 client
                     .send(PgWireBackendMessage::Authentication(
                         Authentication::MD5Password(salt.clone()),
                     ))
                     .await?;
             }
+
+            // 进入密码验证阶段
             PgWireFrontendMessage::PasswordMessageFamily(pwd) => {
                 let pwd = pwd.into_password()?;
                 let cached_pass = self.cached_password.lock().await;
@@ -63,6 +70,7 @@ impl<A: AuthSource, P: ServerParameterProvider> StartupHandler
                 if pwd.password().as_bytes() == *cached_pass {
                     super::finish_authentication(client, self.parameter_provider.as_ref()).await
                 } else {
+                    // 返回密码错误信息
                     let error_info = ErrorInfo::new(
                         "FATAL".to_owned(),
                         "28P01".to_owned(),

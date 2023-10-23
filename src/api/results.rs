@@ -16,10 +16,11 @@ use crate::{
     types::ToSqlText,
 };
 
+/// 代表某个指令的查询结果
 #[derive(Debug, Eq, PartialEq)]
 pub struct Tag {
     command: String,
-    rows: Option<usize>,
+    rows: Option<usize>,  // 查到多少行
 }
 
 impl Tag {
@@ -49,7 +50,7 @@ impl From<Tag> for CommandComplete {
     }
 }
 
-/// Describe encoding of a data field.
+/// Describe encoding of a data field.  描述字段的格式 只有文本和二进制
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum FieldFormat {
     Text,
@@ -114,6 +115,8 @@ pub struct QueryResponse<'a> {
 
 impl<'a> QueryResponse<'a> {
     /// Create `QueryResponse` from column schemas and stream of data row
+    /// FieldInfo 不包含具体的值   row_stream  包含具体的结果值
+    /// 返回的是一个流
     pub fn new<S>(field_defs: Arc<Vec<FieldInfo>>, row_stream: S) -> QueryResponse<'a>
     where
         S: Stream<Item = PgWireResult<DataRow>> + Send + Unpin + 'a,
@@ -139,6 +142,7 @@ pub struct DataRowEncoder {
     buffer: DataRow,
     field_buffer: BytesMut,
     schema: Arc<Vec<FieldInfo>>,
+    // 记录当前行 写入到第几列
     col_index: usize,
 }
 
@@ -167,6 +171,7 @@ impl DataRowEncoder {
     where
         T: ToSql + ToSqlText + Sized,
     {
+        // 按行将字段挨个输出到buf
         let is_null = if format == FieldFormat::Text {
             value.to_sql_text(data_type, &mut self.field_buffer)?
         } else {
@@ -188,6 +193,7 @@ impl DataRowEncoder {
     /// Encode value using type and format, defined by schema
     ///
     /// Panic when encoding more columns than provided as schema.
+    /// 在没有指定type的情况下  就是使用schema
     pub fn encode_field<T>(&mut self, value: &T) -> PgWireResult<()>
     where
         T: ToSql + ToSqlText + Sized,

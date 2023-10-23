@@ -58,6 +58,7 @@ impl ToSqlText for String {
     }
 }
 
+// 就是直接写入数据
 impl<'a> ToSqlText for &'a str {
     fn to_sql_text(
         &self,

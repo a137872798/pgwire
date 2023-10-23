@@ -4,6 +4,7 @@ use std::sync::{Arc, RwLock};
 use super::portal::Portal;
 use super::stmt::StoredStatement;
 
+/// 该对象用于存储解析好的statement
 pub trait PortalStore: Send + Sync {
     type Statement;
 

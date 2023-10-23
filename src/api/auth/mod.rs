@@ -12,7 +12,7 @@ use crate::messages::response::{ReadyForQuery, READY_STATUS_IDLE};
 use crate::messages::startup::{Authentication, BackendKeyData, ParameterStatus, Startup};
 use crate::messages::{PgWireBackendMessage, PgWireFrontendMessage};
 
-/// Handles startup process and frontend messages
+/// Handles startup process and frontend messages  抽象出有关处理握手阶段请求的handler
 #[async_trait]
 pub trait StartupHandler: Send + Sync {
     /// A generic frontend message callback during startup phase.
@@ -27,6 +27,7 @@ pub trait StartupHandler: Send + Sync {
         PgWireError: From<<C as Sink<PgWireBackendMessage>>::Error>;
 }
 
+// 描述一个可以提供服务端配置的对象
 pub trait ServerParameterProvider: Send + Sync {
     fn server_parameters<C>(&self, _client: &C) -> Option<HashMap<String, String>>
     where
@@ -67,6 +68,8 @@ impl Default for DefaultServerParameterProvider {
 }
 
 impl ServerParameterProvider for DefaultServerParameterProvider {
+
+    // 生成一个新对象 而不消耗内部字段所有权
     fn server_parameters<C>(&self, _client: &C) -> Option<HashMap<String, String>>
     where
         C: ClientInfo,
@@ -92,6 +95,7 @@ pub struct Password {
     password: Vec<u8>,
 }
 
+// 本次登录使用的用户名/主机/选择的数据库名
 #[derive(Debug, new, Getters)]
 #[getset(get = "pub")]
 pub struct LoginInfo<'a> {
@@ -101,6 +105,7 @@ pub struct LoginInfo<'a> {
 }
 
 impl<'a> LoginInfo<'a> {
+    // 默认从client信息中获取
     pub fn from_client_info<C>(client: &'a C) -> LoginInfo
     where
         C: ClientInfo,
@@ -120,6 +125,7 @@ impl<'a> LoginInfo<'a> {
 /// specific implementation of `AuthSource`. For example, with cleartext
 /// authentication, salt is not required, while in md5pass, a 4-byte salt is
 /// needed.
+/// 从内置数据源加载password
 #[async_trait]
 pub trait AuthSource: Send + Sync {
     /// Get password from the `AuthSource`.
@@ -128,6 +134,7 @@ pub trait AuthSource: Send + Sync {
     async fn get_password(&self, login: &LoginInfo) -> PgWireResult<Password>;
 }
 
+/// 将startUp阶段获得的信息补充到元数据中
 pub fn save_startup_parameters_to_metadata<C>(client: &mut C, startup_message: &Startup)
 where
     C: ClientInfo + Sink<PgWireBackendMessage> + Unpin + Send,
@@ -141,6 +148,7 @@ where
     );
 }
 
+/// 代表认证结束
 pub async fn finish_authentication<C, P>(client: &mut C, server_parameter_provider: &P)
 where
     C: ClientInfo + Sink<PgWireBackendMessage> + Unpin + Send,
@@ -162,6 +170,7 @@ where
         std::process::id() as i32,
         rand::random::<i32>(),
     )));
+    // 返回一个准备就绪的消息 代表client可以发起查询请求了
     messages.push(PgWireBackendMessage::ReadyForQuery(ReadyForQuery::new(
         READY_STATUS_IDLE,
     )));

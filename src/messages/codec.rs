@@ -9,10 +9,11 @@ use crate::error::PgWireResult;
 /// Note that this implementation will also advance cursor by 1 after reading
 /// empty cstring. This behaviour works for how postgres wire protocol handling
 /// key-value pairs, which is ended by a single `\0`
+/// 将bytes转换成string
 pub(crate) fn get_cstring(buf: &mut BytesMut) -> Option<String> {
     let mut i = 0;
 
-    // with bound check to prevent invalid format
+    // with bound check to prevent invalid format  c语言的string 以\0结尾 所以不断读取
     while i < buf.remaining() && buf[i] != b'\0' {
         i += 1;
     }
@@ -45,6 +46,7 @@ pub(crate) fn put_option_cstring(buf: &mut BytesMut, input: &Option<String>) {
 }
 
 /// Try to read message length from buf, without actually move the cursor
+/// 截取出长度信息
 pub(crate) fn get_length(buf: &BytesMut, offset: usize) -> Option<usize> {
     if buf.remaining() >= 4 + offset {
         Some((&buf[offset..4 + offset]).get_i32() as usize)
@@ -55,6 +57,7 @@ pub(crate) fn get_length(buf: &BytesMut, offset: usize) -> Option<usize> {
 
 /// Check if message_length matches and move the cursor to right position then
 /// call the `decode_fn` for the body
+/// 解析数据包
 pub(crate) fn decode_packet<T, F>(
     buf: &mut BytesMut,
     offset: usize,
@@ -64,6 +67,7 @@ where
     F: Fn(&mut BytesMut, usize) -> PgWireResult<T>,
 {
     if let Some(msg_len) = get_length(buf, offset) {
+        // 有一个完整的数据包
         if buf.remaining() >= msg_len + offset {
             buf.advance(offset + 4);
             return decode_fn(buf, msg_len).map(|r| Some(r));
